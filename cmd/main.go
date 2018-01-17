@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net/http"
 
 	"github.com/ushmodin/criscross"
 )
@@ -13,5 +12,9 @@ func main() {
 		log.Fatal(err)
 	}
 	defer game.Close()
-	http.ListenAndServe(":8080", game.CreateRouter())
+	srv, err := criscross.NewCrisCrossServer(game)
+	if err != nil {
+		log.Fatal(err)
+	}
+	srv.ListenAndServe(":8080")
 }
