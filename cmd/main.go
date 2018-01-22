@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/ushmodin/criscross"
@@ -17,4 +18,5 @@ func main() {
 		log.Fatal(err)
 	}
 	srv.ListenAndServe(":8080")
+	fmt.Println("End")
 }

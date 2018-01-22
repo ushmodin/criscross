@@ -39,7 +39,23 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (srv *CrisCrossServer) regHandler(w http.ResponseWriter, r *http.Request) {
-	err := srv.game.regUser(r)
+	var regReq struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Email    string `json:"email"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&regReq)
+	if err != nil {
+		rsp := ErrorResponse{
+			Code:    "AUTH_ERROR",
+			Message: err.Error(),
+		}
+		w.WriteHeader(http.StatusNoContent)
+		json.NewEncoder(w).Encode(rsp)
+	}
+
+	err = srv.game.regUser(regReq.Username, regReq.Password, regReq.Email)
 
 	if err != nil {
 		rsp := ErrorResponse{
@@ -53,7 +69,20 @@ func (srv *CrisCrossServer) regHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (srv *CrisCrossServer) authHandler(w http.ResponseWriter, r *http.Request) {
-	token, err := srv.game.auth(r)
+	var authReq struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&authReq)
+	if err != nil {
+		rsp := ErrorResponse{
+			Code:    "AUTH_ERROR",
+			Message: err.Error(),
+		}
+		w.WriteHeader(http.StatusNoContent)
+		json.NewEncoder(w).Encode(rsp)
+	}
+	token, err := srv.game.auth(authReq.Username, authReq.Password)
 	if err != nil {
 		rsp := ErrorResponse{
 			Code:    "AUTH_ERROR",
