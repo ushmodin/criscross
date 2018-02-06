@@ -16,7 +16,7 @@ services:
     networks:
       - criscross_nw
     environment:
-      - MONGODB=mongo
+      - MONGODB=mongo1
 volumes:
   criscross:
 networks: 
