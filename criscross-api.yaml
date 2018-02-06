@@ -1,0 +1,100 @@
+swagger: "2.0"
+info:
+  description: "API функционала игры крестики нолики"
+  version: "1.1"
+  title: "Criscross API"
+  contact:
+    email: "ushmodin@e-traffic.ru"
+host: "ushmodin.ru"
+basePath: "/api"
+schemes:
+- "http"
+- "https"
+paths:
+  /reg:
+    post:
+      summary: "Регистрация пользователя"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+        - in: "body"
+          name: "body"
+          required: true
+          schema:
+            $ref: "#/definitions/RegRequest"
+      responses:
+        200:
+          description: "Ответ на положительную геристрацию"
+          schema:
+            $ref: "#/definitions/EmptyResponse"
+        403:
+          description: "Ответ на отрицательную геристрацию"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+  /auth:
+    post:
+      summary: "Регистрация пользователя"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+        - in: "body"
+          name: "body"
+          required: true
+          schema:
+            $ref: "#/definitions/AuthRequest"
+      responses:
+        200:
+          description: "Ответ на положительную авторизацию"
+          schema:
+            $ref: "#/definitions/EmptyResponse"
+          headers:
+            Authorization:
+              type: "string"
+              description: 'Токен авторизации'
+        403:
+          description: "Ответ на отрицательную авторизацию"
+          schema:
+            $ref: "#/definitions/ErrorResponse"
+
+
+securityDefinitions:
+  JWT:
+    description: ""
+    type: apiKey
+    in: header
+    name: "User-Session"
+definitions:
+  RegRequest:
+    type: "object"
+    properties:
+      username:
+        type: "string"
+      password:
+        type: "string"
+      email:
+        type: "string"
+  AuthRequest:
+    type: "object"
+    properties:
+      username:
+        type: "string"
+      password:
+        type: "string"
+  EmptyResponse:
+    type: object
+  ErrorResponse:
+    type: "object"
+    properties:
+      code:
+        type: "string"
+        enum:
+        - UNKNOWN_ERROR
+        - NETWORK_ERROR
+        - AUTH_ERROR
+      message:
+        type: "string"
+
