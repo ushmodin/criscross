@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"log"
-
 	"github.com/ushmodin/criscross/game"
+	"log"
+	"os"
 )
 
 func main() {
-	game, err := criscross.NewCrisCrossGame("localhost")
+	game, err := criscross.NewCrisCrossGame(os.Getenv("MONGODB"))
 	if err != nil {
 		log.Fatal(err)
 	}

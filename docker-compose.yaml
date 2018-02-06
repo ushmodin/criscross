@@ -1,0 +1,22 @@
+version: "2.0"
+services:
+  mongo:
+    image: mongo:3.7-jessie
+    volumes:
+      - criscross:/data/db
+    networks:
+      - criscross_nw
+  criscross:
+    image: criscross
+    ports:
+      - 8080:8080
+    depends_on:
+      - mongo
+    networks:
+      - criscross_nw
+    environment:
+      - MONGODB=mongo
+volumes:
+  criscross:
+networks: 
+  criscross_nw:
