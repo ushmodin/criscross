@@ -3,6 +3,9 @@ package criscross
 import (
 	"encoding/json"
 	"net/http"
+	"time"
+
+	jwt "github.com/dgrijalva/jwt-go"
 
 	"github.com/gorilla/mux"
 )
@@ -47,23 +50,13 @@ func (srv *CrisCrossServer) regHandler(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewDecoder(r.Body).Decode(&regReq)
 	if err != nil {
-		rsp := ErrorResponse{
-			Code:    "AUTH_ERROR",
-			Message: err.Error(),
-		}
-		w.WriteHeader(http.StatusNoContent)
-		json.NewEncoder(w).Encode(rsp)
+		writeError(w, err)
 	}
 
 	err = srv.game.regUser(regReq.Username, regReq.Password, regReq.Email)
 
 	if err != nil {
-		rsp := ErrorResponse{
-			Code:    "AUTH_ERROR",
-			Message: err.Error(),
-		}
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(rsp)
+		writeError(w, err)
 	} else {
 		w.Write([]byte("{}"))
 	}
@@ -75,22 +68,39 @@ func (srv *CrisCrossServer) authHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	err := json.NewDecoder(r.Body).Decode(&authReq)
 	if err != nil {
-		rsp := ErrorResponse{
-			Code:    "AUTH_ERROR",
-			Message: err.Error(),
-		}
-		w.WriteHeader(http.StatusNoContent)
-		json.NewEncoder(w).Encode(rsp)
+		writeError(w, err)
 	}
-	token, err := srv.game.auth(authReq.Username, authReq.Password)
+	err = srv.game.auth(authReq.Username, authReq.Password)
 	if err != nil {
-		rsp := ErrorResponse{
-			Code:    "AUTH_ERROR",
-			Message: err.Error(),
-		}
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(rsp)
+		writeError(w, err)
 	} else {
-		w.Header().Add("Authorization", "Bearer "+token)
+		token, err := createToken(authReq.Username)
+
+		if err != nil {
+			writeError(w, err)
+		} else {
+			w.Header().Add("Authorization", "Bearer "+token)
+		}
 	}
+}
+
+func writeError(w http.ResponseWriter, err error) {
+	rsp := ErrorResponse{
+		Code:    "AUTH_ERROR",
+		Message: err.Error(),
+	}
+	w.WriteHeader(http.StatusForbidden)
+	json.NewEncoder(w).Encode(rsp)
+}
+
+func createToken(username string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.StandardClaims{
+		ExpiresAt: time.Now().Add(time.Hour * time.Duration(1)).UnixNano(),
+		Issuer:    username,
+	})
+	tokenStr, err := token.SignedString([]byte("12345678"))
+	if err != nil {
+		return "", err
+	}
+	return tokenStr, nil
 }

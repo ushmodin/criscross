@@ -2,17 +2,22 @@ package main
 
 import (
 	"fmt"
-	"github.com/ushmodin/criscross/game"
 	"log"
 	"os"
+
+	"github.com/ushmodin/criscross/game"
 )
 
 func main() {
-	game, err := criscross.NewCrisCrossGame(os.Getenv("MONGODB"))
+	err := criscross.StorageConnect(os.Getenv("MONGODB"))
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer game.Close()
+	game, err := criscross.NewCrisCrossGame()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer criscross.StorageClose()
 	srv, err := criscross.NewCrisCrossServer(game)
 	if err != nil {
 		log.Fatal(err)
