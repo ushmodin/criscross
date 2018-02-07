@@ -10,11 +10,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type ErrorResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
 type CrisCrossServer struct {
 	game *CrisCrossGame
 }
@@ -85,10 +80,10 @@ func (srv *CrisCrossServer) authHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func writeError(w http.ResponseWriter, err error) {
-	rsp := ErrorResponse{
-		Code:    "AUTH_ERROR",
-		Message: err.Error(),
-	}
+	rsp := struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}{"AUTH_ERROR", err.Error()}
 	w.WriteHeader(http.StatusForbidden)
 	json.NewEncoder(w).Encode(rsp)
 }
