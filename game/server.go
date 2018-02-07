@@ -2,6 +2,7 @@ package criscross
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -9,10 +10,15 @@ import (
 	jwt "github.com/dgrijalva/jwt-go"
 
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
 var jwtKey = []byte("12345678")
 var jwtSignMethod = jwt.SigningMethodHS256
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  10,
+	WriteBufferSize: 10,
+}
 
 type CrisCrossServer struct {
 	game *CrisCrossGame
@@ -96,7 +102,23 @@ func (srv *CrisCrossServer) authHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (srv *CrisCrossServer) startGame(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("OK"))
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	for {
+		messageType, p, err := conn.ReadMessage()
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		log.Println(string(p))
+		if err := conn.WriteMessage(messageType, p); err != nil {
+			log.Println(err)
+			return
+		}
+	}
 }
 
 func writeError(w http.ResponseWriter, err error) {
