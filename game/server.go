@@ -80,10 +80,15 @@ func (srv *CrisCrossServer) authHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func writeError(w http.ResponseWriter, err error) {
+	gameError, ok := err.(gameError)
+	code := UNKNOW_ERROR
+	if ok {
+		code = gameError.Code()
+	}
 	rsp := struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
-	}{"AUTH_ERROR", err.Error()}
+	}{code, err.Error()}
 	w.WriteHeader(http.StatusForbidden)
 	json.NewEncoder(w).Encode(rsp)
 }
