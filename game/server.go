@@ -50,6 +50,7 @@ func (srv *CrisCrossServer) createRouter() *mux.Router {
 	r.HandleFunc("/api/reg", srv.regHandler).Methods("POST")
 	r.HandleFunc("/api/auth", srv.authHandler).Methods("POST")
 	r.Handle("/api/game/start", jwtMiddleware.Handler(http.HandlerFunc(srv.startGame))).Methods("GET")
+	r.Handle("/api/game/join", jwtMiddleware.Handler(http.HandlerFunc(srv.joinGame))).Methods("GET")
 	return r
 }
 
@@ -107,18 +108,63 @@ func (srv *CrisCrossServer) startGame(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
-	for {
-		messageType, p, err := conn.ReadMessage()
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		log.Println(string(p))
-		if err := conn.WriteMessage(messageType, p); err != nil {
-			log.Println(err)
-			return
-		}
+	in := make(chan []byte)
+	out := make(chan []byte)
+	id := srv.game.start(in, out)
+	stopGame := func() {
+		close(in)
+		close(out)
+		srv.game.stop(id)
+		conn.Close()
 	}
+	go func() {
+		for {
+			_, p, err := conn.ReadMessage()
+			if err != nil {
+				stopGame()
+			}
+			in <- p
+		}
+	}()
+	go func() {
+		for msg := range out {
+			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				stopGame()
+			}
+		}
+	}()
+}
+
+func (srv *CrisCrossServer) joinGame(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	in := make(chan []byte)
+	out := make(chan []byte)
+	srv.game.join(in, out)
+	stopGame := func() {
+		close(in)
+		close(out)
+		conn.Close()
+	}
+	go func() {
+		for {
+			_, p, err := conn.ReadMessage()
+			if err != nil {
+				stopGame()
+			}
+			in <- p
+		}
+	}()
+	go func() {
+		for msg := range out {
+			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				stopGame()
+			}
+		}
+	}()
 }
 
 func writeError(w http.ResponseWriter, err error) {

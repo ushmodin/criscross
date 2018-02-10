@@ -12,6 +12,18 @@ func NewCrisCrossGame() (*CrisCrossGame, error) {
 	return &CrisCrossGame{}, nil
 }
 
+func (game *CrisCrossGame) start(in, out chan []byte) interface{} {
+	return nil
+}
+
+func (game *CrisCrossGame) stop(id interface{}) {
+
+}
+
+func (game *CrisCrossGame) join(in, out chan []byte) {
+
+}
+
 func (game *CrisCrossGame) regUser(username, password, email string) gameError {
 	q, err := FindUser(username)
 	if err != nil {
