@@ -1,9 +1,11 @@
 package criscross
 
 const (
-	UNKNOW_ERROR = "UNKNOWN_ERROR"
-	AUTH_ERROR   = "AUTH_ERROR"
-	REG_ERROR    = "REG_ERROR"
+	UNKNOW_ERROR  = "UNKNOWN_ERROR"
+	AUTH_ERROR    = "AUTH_ERROR"
+	REG_ERROR     = "REG_ERROR"
+	NOT_YOUR_STEP = "NOT_YOUR_STEP"
+	VALUE_ERROR   = "VALUE_ERROR"
 )
 
 type gameError interface {
