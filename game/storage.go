@@ -36,9 +36,16 @@ func FindUser(username string) (*mgo.Query, error) {
 
 func CreateUser(username, password, email string) error {
 	c := mongo.DB("criscrossgame").C("users")
-	return c.Insert(struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-		Email    string `json:"email"`
-	}{username, fmt.Sprintf("%x", md5.Sum([]byte(password))), email})
+	return c.Insert(User{username, fmt.Sprintf("%x", md5.Sum([]byte(password))), email})
+}
+func LoadGame(gameId bson.ObjectId) (*mgo.Query, error) {
+	c := mongo.DB("criscrossgame").C("games")
+	return c.Find(bson.M{"_id": gameId})
+}
+
+func SaveGame(game CrisCrossGame) error {
+	id := mgo.NewObjectId()
+	game.ID = id
+	c := mongo.DB("criscrossgame").C("games")
+	c.Insert(game)
 }
