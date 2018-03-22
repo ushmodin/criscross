@@ -13,15 +13,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	game, err := criscross.NewCrisCrossGame()
-	if err != nil {
-		log.Fatal(err)
-	}
 	defer criscross.StorageClose()
-	srv, err := criscross.NewCrisCrossServer(game)
+	err = criscross.StartHttpServer("localhost:4000")
 	if err != nil {
 		log.Fatal(err)
 	}
-	srv.ListenAndServe(":8080")
 	fmt.Println("End")
 }

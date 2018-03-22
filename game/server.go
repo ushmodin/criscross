@@ -20,21 +20,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 10,
 }
 
-type CrisCrossServer struct {
-	game *CrisCrossGame
-}
-
-func NewCrisCrossServer(game *CrisCrossGame) (*CrisCrossServer, error) {
-	return &CrisCrossServer{game: game}, nil
-}
-
-func (srv *CrisCrossServer) ListenAndServe(addr string) {
-	r := srv.createRouter()
-	http.ListenAndServe(addr, r)
-}
-
-func (srv *CrisCrossServer) createRouter() *mux.Router {
-
+func StartHttpServer(addr string) error {
 	jwtMiddleware := jwtmiddleware.New(jwtmiddleware.Options{
 		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
 			return jwtKey, nil
@@ -47,11 +33,12 @@ func (srv *CrisCrossServer) createRouter() *mux.Router {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/api/ping", pingHandler).Methods("GET")
-	r.HandleFunc("/api/reg", srv.regHandler).Methods("POST")
-	r.HandleFunc("/api/auth", srv.authHandler).Methods("POST")
-	r.Handle("/api/game/start", jwtMiddleware.Handler(http.HandlerFunc(srv.startGame))).Methods("GET")
-	r.Handle("/api/game/join", jwtMiddleware.Handler(http.HandlerFunc(srv.joinGame))).Methods("GET")
-	return r
+	r.HandleFunc("/api/reg", regHandler).Methods("POST")
+	r.HandleFunc("/api/auth", authHandler).Methods("POST")
+	r.Handle("/api/game/start", jwtMiddleware.Handler(http.HandlerFunc(startGameHandler))).Methods("GET")
+	r.Handle("/api/game/join", jwtMiddleware.Handler(http.HandlerFunc(joinHandler))).Methods("GET")
+
+	return http.ListenAndServe(addr, r)
 }
 
 func pingHandler(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +46,7 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (srv *CrisCrossServer) regHandler(w http.ResponseWriter, r *http.Request) {
+func regHandler(w http.ResponseWriter, r *http.Request) {
 	var regReq struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -71,7 +58,7 @@ func (srv *CrisCrossServer) regHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 	}
 
-	err = srv.game.regUser(regReq.Username, regReq.Password, regReq.Email)
+	err = CreateUser(regReq.Username, regReq.Password, regReq.Email)
 
 	if err != nil {
 		writeError(w, err)
@@ -79,7 +66,7 @@ func (srv *CrisCrossServer) regHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("{}"))
 	}
 }
-func (srv *CrisCrossServer) authHandler(w http.ResponseWriter, r *http.Request) {
+func authHandler(w http.ResponseWriter, r *http.Request) {
 	var authReq struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -88,7 +75,7 @@ func (srv *CrisCrossServer) authHandler(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		writeError(w, err)
 	}
-	err = srv.game.auth(authReq.Username, authReq.Password)
+	_, err = FindUser(authReq.Username)
 	if err != nil {
 		writeError(w, err)
 	} else {
@@ -102,69 +89,20 @@ func (srv *CrisCrossServer) authHandler(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (srv *CrisCrossServer) startGame(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+func startGameHandler(w http.ResponseWriter, r *http.Request) {
+	_, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	in := make(chan []byte)
-	out := make(chan []byte)
-	id := srv.game.start(in, out)
-	stopGame := func() {
-		close(in)
-		close(out)
-		srv.game.stop(id)
-		conn.Close()
-	}
-	go func() {
-		for {
-			_, p, err := conn.ReadMessage()
-			if err != nil {
-				stopGame()
-			}
-			in <- p
-		}
-	}()
-	go func() {
-		for msg := range out {
-			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-				stopGame()
-			}
-		}
-	}()
 }
 
-func (srv *CrisCrossServer) joinGame(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+func joinHandler(w http.ResponseWriter, r *http.Request) {
+	_, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	in := make(chan []byte)
-	out := make(chan []byte)
-	srv.game.join(in, out)
-	stopGame := func() {
-		close(in)
-		close(out)
-		conn.Close()
-	}
-	go func() {
-		for {
-			_, p, err := conn.ReadMessage()
-			if err != nil {
-				stopGame()
-			}
-			in <- p
-		}
-	}()
-	go func() {
-		for msg := range out {
-			if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-				stopGame()
-			}
-		}
-	}()
 }
 
 func writeError(w http.ResponseWriter, err error) {
