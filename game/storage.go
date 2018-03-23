@@ -1,8 +1,6 @@
 package criscross
 
 import (
-	"crypto/md5"
-	"fmt"
 	"log"
 	"time"
 
@@ -29,16 +27,21 @@ func StorageClose() {
 	mongo.Close()
 }
 
-func FindUser(username string) (*mgo.Query, error) {
+func FindUser(username string) *mgo.Query {
 	c := mongo.DB("criscrossgame").C("users")
-	return c.Find(bson.M{"username": username}), nil
+	return c.Find(bson.M{"username": username})
 }
 
-func CreateUser(username, password, email string) error {
+func FindUserByID(id string) *mgo.Query {
+	c := mongo.DB("criscrossgame").C("users")
+	return c.Find(bson.M{"_id": id})
+}
+
+func CreateUser(username string, password string, email string) error {
 	c := mongo.DB("criscrossgame").C("users")
 	return c.Insert(User{
 		Username: username,
-		Password: fmt.Sprintf("%x", md5.Sum([]byte(password))),
+		Password: password,
 		Email:    email,
 	})
 }
@@ -47,7 +50,7 @@ func LoadGame(gameId bson.ObjectId) *mgo.Query {
 	return c.Find(bson.M{"_id": gameId})
 }
 
-func SaveGame(game CrisCrossGame) (bson.ObjectId, error) {
+func SaveGame(game Game) (bson.ObjectId, error) {
 	id := bson.NewObjectId()
 	game.ID = id
 	c := mongo.DB("criscrossgame").C("games")

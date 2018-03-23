@@ -1,9 +1,13 @@
 package criscross
 
 import (
+	"crypto/md5"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/auth0/go-jwt-middleware"
@@ -14,6 +18,9 @@ import (
 )
 
 var jwtKey = []byte("12345678")
+var keyGetterFunc = func(token *jwt.Token) (interface{}, error) {
+	return jwtKey, nil
+}
 var jwtSignMethod = jwt.SigningMethodHS256
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  10,
@@ -22,10 +29,8 @@ var upgrader = websocket.Upgrader{
 
 func StartHttpServer(addr string) error {
 	jwtMiddleware := jwtmiddleware.New(jwtmiddleware.Options{
-		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
-			return jwtKey, nil
-		},
-		SigningMethod: jwtSignMethod,
+		ValidationKeyGetter: keyGetterFunc,
+		SigningMethod:       jwtSignMethod,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err string) {
 			writeError(w, NewGameError(AUTH_ERROR, err))
 		},
@@ -58,7 +63,7 @@ func regHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 	}
 
-	err = CreateUser(regReq.Username, regReq.Password, regReq.Email)
+	err = CreateUser(regReq.Username, fmt.Sprintf("%x", md5.Sum([]byte(regReq.Password))), regReq.Email)
 
 	if err != nil {
 		writeError(w, err)
@@ -75,26 +80,68 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, err)
 	}
-	_, err = FindUser(authReq.Username)
+	q := FindUser(authReq.Username)
+	var user User
+	err = q.One(&user)
+	if err != nil {
+		writeError(w, NewGameError(AUTH_ERROR, "User or password not found"))
+		return
+	}
+	if user.Password != fmt.Sprintf("%x", md5.Sum([]byte(authReq.Password))) {
+		writeError(w, NewGameError(AUTH_ERROR, "User or password not found"))
+		return
+	}
+	token, err := createToken(user)
+
 	if err != nil {
 		writeError(w, err)
 	} else {
-		token, err := createToken(authReq.Username)
-
-		if err != nil {
-			writeError(w, err)
-		} else {
-			w.Header().Add("Authorization", "Bearer "+token)
-		}
+		w.Header().Add("Authorization", "Bearer "+token)
 	}
 }
 
 func startGameHandler(w http.ResponseWriter, r *http.Request) {
-	_, err := upgrader.Upgrade(w, r, nil)
+	user, err := getUser(r)
 	if err != nil {
-		log.Println(err)
+		writeError(w, err)
 		return
 	}
+	id, err := StartGame(user)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	rsp := struct {
+		GameId string `json:"gameId"`
+	}{id.String()}
+	json.NewEncoder(w).Encode(rsp)
+}
+
+func getUser(r *http.Request) (User, error) {
+	header := r.Header["Authorization"][0]
+	var token string
+	if strings.HasPrefix(header, "Bearer ") {
+		token = header[0:7]
+	}
+	if len(token) == 0 {
+		return User{}, errors.New("Can't parse jwt token")
+	}
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, keyGetterFunc)
+	if err != nil {
+		return User{}, err
+	}
+	userID := claims["Subject"].(string)
+	if len(userID) == 0 {
+		return User{}, errors.New("Invalide token. Can't find Subject")
+	}
+	var user User
+	err = FindUserByID(userID).One(&user)
+	if err != nil {
+		return User{}, errors.New("Invalide token. Can't find User")
+	}
+	return user, nil
 }
 
 func joinHandler(w http.ResponseWriter, r *http.Request) {
@@ -119,10 +166,11 @@ func writeError(w http.ResponseWriter, err error) {
 	json.NewEncoder(w).Encode(rsp)
 }
 
-func createToken(username string) (string, error) {
+func createToken(user User) (string, error) {
 	token := jwt.NewWithClaims(jwtSignMethod, jwt.StandardClaims{
 		ExpiresAt: time.Now().Add(time.Hour * time.Duration(1)).UnixNano(),
-		Issuer:    username,
+		Subject:   user.ID.String(),
+		Issuer:    user.Username,
 	})
 	tokenStr, err := token.SignedString(jwtKey)
 	if err != nil {

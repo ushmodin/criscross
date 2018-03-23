@@ -12,7 +12,7 @@ const (
 	GameStatusInGame = 2
 )
 
-type CrisCrossGame struct {
+type Game struct {
 	ID      bson.ObjectId `bson:"_id,omitempty"`
 	Owner   bson.ObjectId `bson:"ownerId"`
 	Guest   bson.ObjectId `bson:"guestId"`
