@@ -14,5 +14,7 @@
 .glide/
 
 ca-certificates.crt
-/main
-/criscross
+/server/main
+
+.idea/
+.gradle/
