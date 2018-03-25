@@ -1,6 +1,7 @@
 package criscross
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/json"
 	"errors"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/auth0/go-jwt-middleware"
 	jwt "github.com/dgrijalva/jwt-go"
-
+	"github.com/go-redis/redis"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
@@ -25,6 +26,21 @@ var jwtSignMethod = jwt.SigningMethodHS256
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  10,
 	WriteBufferSize: 10,
+}
+var redisClient *redis.Client
+
+func RedisConnect(addr string, db int) error {
+	redisClient = redis.NewClient(&redis.Options{
+		Addr:     addr,
+		Password: "", // no password set
+		DB:       db, // use default DB
+	})
+	_, err := redisClient.Ping().Result()
+	return err
+}
+
+func RedisClose() {
+	redisClient.Close()
 }
 
 func StartHttpServer(addr string) error {
@@ -145,10 +161,46 @@ func getUser(r *http.Request) (User, error) {
 }
 
 func joinHandler(w http.ResponseWriter, r *http.Request) {
-	_, err := upgrader.Upgrade(w, r, nil)
+	user, err := getUser(r)
 	if err != nil {
-		log.Println(err)
+		writeError(w, err)
 		return
+	}
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		writeError(w, NewGameError(UNKNOW_ERROR, "Can't open websocket"))
+		return
+	}
+	defer conn.Close()
+	go func() {
+		for {
+			res := redisClient.BRPop(0, "gamer:"+user.ID.String())
+			if res.Err() == redis.Nil {
+				log.Println("Empty response from redis")
+				continue
+			} else if res.Err() != nil {
+				log.Println("Error while read from redis", err)
+				break
+			} else {
+				conn.WriteMessage(0, []byte(res.Val()[0]))
+			}
+		}
+	}()
+	for {
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			writeError(w, NewGameError(UNKNOW_ERROR, "Can't read websocket"))
+			return
+		}
+		var msg struct {
+			Type   string `json:"type"`
+			GameId string `json:"gameId"`
+			Step   struct {
+				X int8 `json:"x"`
+				Y int8 `json:"x"`
+			}
+		}
+		json.NewDecoder(bytes.NewReader(data)).Decode(&msg)
 	}
 }
 

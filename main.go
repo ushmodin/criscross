@@ -9,12 +9,15 @@ import (
 )
 
 func main() {
-	err := criscross.StorageConnect(os.Getenv("MONGODB"))
-	if err != nil {
+	if err := criscross.RedisConnect("localhost:6379", 0); err != nil {
 		log.Fatal(err)
 	}
+	if err := criscross.StorageConnect(os.Getenv("MONGODB")); err != nil {
+		log.Fatal(err)
+	}
+	defer criscross.RedisClose()
 	defer criscross.StorageClose()
-	err = criscross.StartHttpServer("localhost:4000")
+	err := criscross.StartHttpServer("localhost:4000")
 	if err != nil {
 		log.Fatal(err)
 	}
