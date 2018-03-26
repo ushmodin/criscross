@@ -6,6 +6,8 @@ const (
 	REG_ERROR     = "REG_ERROR"
 	NOT_YOUR_STEP = "NOT_YOUR_STEP"
 	VALUE_ERROR   = "VALUE_ERROR"
+	GAME_ERROR    = "GAME_ERROR"
+	CELL_BUSY     = "CELL_BUSY"
 )
 
 type gameError interface {

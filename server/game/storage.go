@@ -32,7 +32,7 @@ func FindUser(username string) *mgo.Query {
 	return c.Find(bson.M{"username": username})
 }
 
-func FindUserByID(id string) *mgo.Query {
+func FindUserByID(id bson.ObjectId) *mgo.Query {
 	c := mongo.DB("criscrossgame").C("users")
 	return c.Find(bson.M{"_id": id})
 }
@@ -45,6 +45,7 @@ func CreateUser(username string, password string, email string) error {
 		Email:    email,
 	})
 }
+
 func LoadGame(gameId bson.ObjectId) *mgo.Query {
 	c := mongo.DB("criscrossgame").C("games")
 	return c.Find(bson.M{"_id": gameId})
@@ -59,4 +60,9 @@ func SaveGame(game Game) (bson.ObjectId, error) {
 		return id, err
 	}
 	return id, nil
+}
+
+func UpdateGame(game Game) error {
+	c := mongo.DB("criscrossgame").C("games")
+	c.Update
 }

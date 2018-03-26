@@ -1,19 +1,18 @@
 package criscross
 
 import (
-	"bytes"
 	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"gopkg.in/mgo.v2/bson"
+
 	"github.com/auth0/go-jwt-middleware"
 	jwt "github.com/dgrijalva/jwt-go"
-	"github.com/go-redis/redis"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
@@ -26,21 +25,6 @@ var jwtSignMethod = jwt.SigningMethodHS256
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  10,
 	WriteBufferSize: 10,
-}
-var redisClient *redis.Client
-
-func RedisConnect(addr string, db int) error {
-	redisClient = redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: "", // no password set
-		DB:       db, // use default DB
-	})
-	_, err := redisClient.Ping().Result()
-	return err
-}
-
-func RedisClose() {
-	redisClient.Close()
 }
 
 func StartHttpServer(addr string) error {
@@ -57,7 +41,8 @@ func StartHttpServer(addr string) error {
 	r.HandleFunc("/api/reg", regHandler).Methods("POST")
 	r.HandleFunc("/api/auth", authHandler).Methods("POST")
 	r.Handle("/api/game/start", jwtMiddleware.Handler(http.HandlerFunc(startGameHandler))).Methods("GET")
-	r.Handle("/api/game/join", jwtMiddleware.Handler(http.HandlerFunc(joinHandler))).Methods("GET")
+	r.Handle("/api/game/{id}", jwtMiddleware.Handler(http.HandlerFunc(gameStatusHandler))).Methods("GET")
+	r.Handle("/api/game/{id}", jwtMiddleware.Handler(http.HandlerFunc(stepHandler))).Methods("POST")
 
 	return http.ListenAndServe(addr, r)
 }
@@ -129,8 +114,107 @@ func startGameHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rsp := struct {
-		GameId string `json:"gameId"`
+		GameID string `json:"gameId"`
 	}{id.String()}
+	json.NewEncoder(w).Encode(rsp)
+}
+
+func stepHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := getUser(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	params := mux.Vars(r)
+	gameID := params["id"]
+	var game Game
+	if err := LoadGame(bson.ObjectId(gameID)).One(&game); err != nil {
+		writeError(w, NewGameError(GAME_ERROR, "Game not found"))
+		return
+	}
+	if game.Owner != user.ID || game.Guest != user.ID {
+		writeError(w, NewGameError(GAME_ERROR, "Game not found"))
+		return
+	}
+	if (game.WhoNext == PlayerGuest && user.ID != game.Guest) ||
+		(game.WhoNext == PlayerOwner && user.ID != game.Owner) {
+		writeError(w, NewGameError(NOT_YOUR_STEP, ""))
+		return
+	}
+	var req struct {
+		Row int `json:"row"`
+		Col int `json:"col"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, errors.New("Invalid request"))
+		return
+	}
+	if game.Board[req.Row][req.Col] != PlayerUnknown {
+		writeError(w, NewGameError(CELL_BUSY, ""))
+		return
+	}
+	if user.ID == game.Owner {
+		game.Board[req.Row][req.Col] = PlayerOwner
+	} else {
+		game.Board[req.Row][req.Col] = PlayerGuest
+	}
+	UpdateGame(game)
+}
+
+func gameStatusHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := getUser(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	params := mux.Vars(r)
+	gameID := params["id"]
+	var game Game
+	if err := LoadGame(bson.ObjectId(gameID)).One(&game); err != nil {
+		writeError(w, NewGameError(GAME_ERROR, "Game not found"))
+		return
+	}
+	if game.Owner != user.ID || game.Guest != user.ID {
+		writeError(w, NewGameError(GAME_ERROR, "Game not found"))
+		return
+	}
+	var rsp struct {
+		Board  [][]int `json:"board"`
+		Next   string  `json:"next"`
+		Winner string  `json:"winner"`
+		Guest  string  `json:"guest"`
+		Owner  string  `json:"owner"`
+	}
+	rsp.Board = game.Board
+	if game.WhoNext == PlayerGuest {
+		rsp.Next = "GUEST"
+	} else if game.WhoNext == PlayerOwner {
+		rsp.Next = "OWNER"
+	} else {
+		rsp.Next = "UNKNOW"
+	}
+	if game.Status == GameStatusEnd {
+		if game.Winner == PlayerGuest {
+			rsp.Winner = "GUEST"
+		} else if game.Winner == PlayerOwner {
+			rsp.Winner = "OWNER"
+		} else {
+			rsp.Winner = "UNKNOWN"
+		}
+	}
+	var guest User
+	if err := FindUserByID(game.Guest).One(&guest); err != nil {
+		writeError(w, errors.New("Can't find guest"))
+		return
+	}
+	rsp.Guest = guest.Username
+
+	var owner User
+	if err := FindUserByID(game.Owner).One(&owner); err != nil {
+		writeError(w, errors.New("Can't find Owner"))
+		return
+	}
+	rsp.Owner = owner.Username
 	json.NewEncoder(w).Encode(rsp)
 }
 
@@ -153,55 +237,10 @@ func getUser(r *http.Request) (User, error) {
 		return User{}, errors.New("Invalide token. Can't find Subject")
 	}
 	var user User
-	err = FindUserByID(userID).One(&user)
-	if err != nil {
+	if err := FindUserByID(bson.ObjectId(userID)).One(&user); err != nil {
 		return User{}, errors.New("Invalide token. Can't find User")
 	}
 	return user, nil
-}
-
-func joinHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := getUser(r)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		writeError(w, NewGameError(UNKNOW_ERROR, "Can't open websocket"))
-		return
-	}
-	defer conn.Close()
-	go func() {
-		for {
-			res := redisClient.BRPop(0, "gamer:"+user.ID.String())
-			if res.Err() == redis.Nil {
-				log.Println("Empty response from redis")
-				continue
-			} else if res.Err() != nil {
-				log.Println("Error while read from redis", err)
-				break
-			} else {
-				conn.WriteMessage(0, []byte(res.Val()[0]))
-			}
-		}
-	}()
-	for {
-		_, data, err := conn.ReadMessage()
-		if err != nil {
-			writeError(w, NewGameError(UNKNOW_ERROR, "Can't read websocket"))
-			return
-		}
-		var msg struct {
-			Type   string `json:"type"`
-			GameId string `json:"gameId"`
-			Step   struct {
-				X int8 `json:"x"`
-				Y int8 `json:"x"`
-			}
-		}
-		json.NewDecoder(bytes.NewReader(data)).Decode(&msg)
-	}
 }
 
 func writeError(w http.ResponseWriter, err error) {
