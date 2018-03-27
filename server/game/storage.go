@@ -64,5 +64,5 @@ func SaveGame(game Game) (bson.ObjectId, error) {
 
 func UpdateGame(game Game) error {
 	c := mongo.DB("criscrossgame").C("games")
-	c.Update
+	return c.Update(bson.M{"_id": game.ID}, bson.M{"$set": game})
 }

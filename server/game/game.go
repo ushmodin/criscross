@@ -14,3 +14,11 @@ func StartGame(user User) (bson.ObjectId, error) {
 	}
 	return SaveGame(game)
 }
+
+func UpdateWinner(game *Game) {
+	for i := 0; i < len(game.Board); i++ {
+		for j := 0; j < len(game.Board[i]); j++ {
+
+		}
+	}
+}

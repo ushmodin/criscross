@@ -158,6 +158,7 @@ func stepHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		game.Board[req.Row][req.Col] = PlayerGuest
 	}
+	updateWinner(game)
 	UpdateGame(game)
 }
 
@@ -179,13 +180,25 @@ func gameStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var rsp struct {
-		Board  [][]int `json:"board"`
-		Next   string  `json:"next"`
-		Winner string  `json:"winner"`
-		Guest  string  `json:"guest"`
-		Owner  string  `json:"owner"`
+		Board  [][]string `json:"board"`
+		Next   string     `json:"next"`
+		Winner string     `json:"winner"`
+		Guest  string     `json:"guest"`
+		Owner  string     `json:"owner"`
 	}
-	rsp.Board = game.Board
+	rsp.Board = make([][]string, len(game.Board))
+	for i := 0; i < len(game.Board); i++ {
+		rsp.Board[i] = make([]string, 3)
+		for j := 0; j < len(game.Board[i]); j++ {
+			if game.Board[i][j] == PlayerGuest {
+				rsp.Board[i][j] = "O"
+			} else if game.Board[i][j] == PlayerOwner {
+				rsp.Board[i][j] = "X"
+			} else {
+				rsp.Board[i][j] = " "
+			}
+		}
+	}
 	if game.WhoNext == PlayerGuest {
 		rsp.Next = "GUEST"
 	} else if game.WhoNext == PlayerOwner {
@@ -208,7 +221,6 @@ func gameStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rsp.Guest = guest.Username
-
 	var owner User
 	if err := FindUserByID(game.Owner).One(&owner); err != nil {
 		writeError(w, errors.New("Can't find Owner"))
